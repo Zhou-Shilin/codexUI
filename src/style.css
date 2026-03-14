@@ -421,3 +421,104 @@
 :root.dark .thread-composer-input::placeholder {
   @apply text-zinc-500;
 }
+
+.auth-screen {
+  @apply min-h-screen bg-zinc-100 text-zinc-900 flex items-center justify-center p-6;
+}
+
+.auth-card {
+  @apply w-full max-w-xl rounded-3xl border border-zinc-200 bg-white shadow-xl p-8 flex flex-col gap-5;
+}
+
+.auth-title {
+  @apply text-3xl font-semibold;
+}
+
+.auth-subtitle {
+  @apply text-sm text-zinc-500;
+}
+
+.auth-methods {
+  @apply grid gap-3 md:grid-cols-2;
+}
+
+.auth-method-button {
+  @apply rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm font-medium text-left hover:bg-zinc-100 disabled:opacity-60 disabled:cursor-not-allowed;
+}
+
+.auth-method-button.is-primary {
+  @apply bg-zinc-900 text-white hover:bg-zinc-800;
+}
+
+.auth-api-form {
+  @apply flex flex-col gap-4;
+}
+
+.auth-field {
+  @apply flex flex-col gap-2 text-sm font-medium;
+}
+
+.auth-input {
+  @apply rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm outline-none focus:border-zinc-500;
+}
+
+.auth-remote-box {
+  @apply rounded-2xl border border-sky-200 bg-sky-50 p-4;
+}
+
+.auth-remote-label {
+  @apply text-sm font-medium text-sky-900 mb-2;
+}
+
+.auth-remote-link {
+  @apply text-sm text-sky-700 break-all underline;
+}
+
+.auth-error {
+  @apply text-sm text-rose-600;
+}
+
+.auth-status {
+  @apply text-sm text-zinc-500;
+}
+
+:root.dark .auth-screen {
+  @apply bg-zinc-950 text-zinc-100;
+}
+
+:root.dark .auth-card {
+  @apply border-zinc-800 bg-zinc-900;
+}
+
+:root.dark .auth-subtitle,
+:root.dark .auth-status {
+  @apply text-zinc-400;
+}
+
+:root.dark .auth-method-button {
+  @apply border-zinc-700 bg-zinc-800 text-zinc-100 hover:bg-zinc-700;
+}
+
+:root.dark .auth-method-button.is-primary {
+  @apply bg-zinc-100 text-zinc-900 hover:bg-white;
+}
+
+:root.dark .auth-input {
+  @apply border-zinc-700 bg-zinc-800 text-zinc-100 focus:border-zinc-500;
+}
+
+:root.dark .auth-remote-box {
+  @apply border-sky-900 bg-sky-950/40;
+}
+
+:root.dark .auth-remote-label {
+  @apply text-sky-200;
+}
+
+:root.dark .auth-remote-link {
+  @apply text-sky-400;
+}
+
+:root.dark .auth-error {
+  @apply text-rose-400;
+}

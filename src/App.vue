@@ -1,5 +1,42 @@
 <template>
-  <DesktopLayout :is-sidebar-collapsed="isSidebarCollapsed" @close-sidebar="setSidebarCollapsed(true)">
+  <section v-if="authState.loginRequired" class="auth-screen">
+    <div class="auth-card">
+      <h1 class="auth-title">Sign in to Codex</h1>
+      <p class="auth-subtitle">Choose the same login style as the official CLI.</p>
+
+      <div class="auth-methods">
+        <button class="auth-method-button" type="button" :disabled="isAuthBusy" @click="onStartOauthLogin('oauth-local')">
+          OAuth (local browser)
+        </button>
+        <button class="auth-method-button" type="button" :disabled="isAuthBusy" @click="onStartOauthLogin('oauth-remote')">
+          OAuth (remote/device code)
+        </button>
+      </div>
+
+      <form class="auth-api-form" @submit.prevent="onStartApiKeyLogin">
+        <label class="auth-field">
+          <span>API key</span>
+          <input v-model="apiKeyInput" class="auth-input" type="password" placeholder="sk-..." :disabled="isAuthBusy" />
+        </label>
+        <label class="auth-field">
+          <span>Base URL</span>
+          <input v-model="baseUrlInput" class="auth-input" type="url" placeholder="https://api.example.com" :disabled="isAuthBusy" />
+        </label>
+        <button class="auth-method-button is-primary" type="submit" :disabled="isAuthBusy || !apiKeyInput.trim()">
+          API key login
+        </button>
+      </form>
+
+      <div v-if="pendingOauthUrl" class="auth-remote-box">
+        <p class="auth-remote-label">Open this URL to continue:</p>
+        <a class="auth-remote-link" :href="pendingOauthUrl" target="_blank" rel="noreferrer">{{ pendingOauthUrl }}</a>
+      </div>
+
+      <p v-if="authError" class="auth-error">{{ authError }}</p>
+      <p v-else-if="isAuthBusy" class="auth-status">Waiting for login to complete…</p>
+    </div>
+  </section>
+  <DesktopLayout v-else :is-sidebar-collapsed="isSidebarCollapsed" @close-sidebar="setSidebarCollapsed(true)">
     <template #sidebar>
       <section class="sidebar-root">
         <div class="sidebar-scrollable">
@@ -198,7 +235,7 @@ import IconTablerSettings from './components/icons/IconTablerSettings.vue'
 import IconTablerX from './components/icons/IconTablerX.vue'
 import { useDesktopState } from './composables/useDesktopState'
 import { useMobile } from './composables/useMobile'
-import { getHomeDirectory, getProjectRootSuggestion, openProjectRoot } from './api/codexGateway'
+import { cancelAccountLogin, getAuthState, getHomeDirectory, getProjectRootSuggestion, openProjectRoot, startAccountLogin } from './api/codexGateway'
 import type { ReasoningEffort, ThreadScrollState } from './types/codex'
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'codex-web-local.sidebar-collapsed.v1'
@@ -268,6 +305,13 @@ const DARK_MODE_KEY = 'codex-web-local.dark-mode.v1'
 const sendWithEnter = ref(loadBoolPref(SEND_WITH_ENTER_KEY, true))
 const inProgressSendMode = ref<'steer' | 'queue'>(loadInProgressSendModePref())
 const darkMode = ref<'system' | 'light' | 'dark'>(loadDarkModePref())
+const authState = ref({ loginRequired: false, accountEmail: '', authMode: '', chatgptBaseUrl: '' })
+const apiKeyInput = ref('')
+const baseUrlInput = ref('')
+const authError = ref('')
+const isAuthBusy = ref(false)
+const pendingOauthUrl = ref('')
+const pendingLoginId = ref('')
 
 const routeThreadId = computed(() => {
   const rawThreadId = route.params.threadId
@@ -341,6 +385,7 @@ onMounted(() => {
   window.addEventListener('keydown', onWindowKeyDown)
   applyDarkMode()
   darkModeMediaQuery?.addEventListener('change', applyDarkMode)
+  void refreshAuthState()
   void initialize()
   void loadHomeDirectory()
   void refreshDefaultProjectName()
@@ -652,10 +697,92 @@ function normalizeMessageType(rawType: string | undefined, role: string): string
 }
 
 async function initialize(): Promise<void> {
+  await refreshAuthState()
+  if (authState.value.loginRequired) {
+    hasInitialized.value = true
+    stopPolling()
+    return
+  }
   await refreshAll()
   hasInitialized.value = true
   await syncThreadSelectionWithRoute()
   startPolling()
+}
+
+async function refreshAuthState(): Promise<void> {
+  authState.value = await getAuthState()
+  if (authState.value.chatgptBaseUrl) {
+    baseUrlInput.value = authState.value.chatgptBaseUrl
+  }
+}
+
+async function onStartOauthLogin(method: 'oauth-local' | 'oauth-remote'): Promise<void> {
+  authError.value = ''
+  pendingOauthUrl.value = ''
+  isAuthBusy.value = true
+  try {
+    const response = await startAccountLogin(method)
+    if (response.type === 'chatgpt') {
+      pendingLoginId.value = response.loginId
+      pendingOauthUrl.value = response.authUrl
+      if (method === 'oauth-local') {
+        window.open(response.authUrl, '_blank', 'noopener,noreferrer')
+      }
+      await pollForCompletedLogin()
+      return
+    }
+    await refreshAuthState()
+    if (!authState.value.loginRequired) {
+      await refreshAll()
+      startPolling()
+    }
+  } catch (error) {
+    authError.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    isAuthBusy.value = false
+  }
+}
+
+async function onStartApiKeyLogin(): Promise<void> {
+  authError.value = ''
+  pendingOauthUrl.value = ''
+  isAuthBusy.value = true
+  try {
+    await startAccountLogin('api-key', {
+      apiKey: apiKeyInput.value,
+      baseUrl: baseUrlInput.value,
+    })
+    apiKeyInput.value = ''
+    await refreshAuthState()
+    if (!authState.value.loginRequired) {
+      await refreshAll()
+      startPolling()
+    }
+  } catch (error) {
+    authError.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    isAuthBusy.value = false
+  }
+}
+
+async function pollForCompletedLogin(): Promise<void> {
+  const startedAt = Date.now()
+  while (Date.now() - startedAt < 120000) {
+    await new Promise((resolve) => window.setTimeout(resolve, 1500))
+    await refreshAuthState()
+    if (!authState.value.loginRequired) {
+      pendingLoginId.value = ''
+      pendingOauthUrl.value = ''
+      await refreshAll()
+      startPolling()
+      return
+    }
+  }
+  if (pendingLoginId.value) {
+    await cancelAccountLogin(pendingLoginId.value).catch(() => {})
+    pendingLoginId.value = ''
+  }
+  throw new Error('Login timed out before completion')
 }
 
 async function syncThreadSelectionWithRoute(): Promise<void> {
