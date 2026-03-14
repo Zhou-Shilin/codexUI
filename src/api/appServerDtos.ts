@@ -7,4 +7,5 @@ export type { Turn } from '../../documentation/app-server-schemas/typescript/v2/
 export type { UserInput } from '../../documentation/app-server-schemas/typescript/v2/UserInput'
 export type { ModelListResponse } from '../../documentation/app-server-schemas/typescript/v2/ModelListResponse'
 export type { ConfigReadResponse } from '../../documentation/app-server-schemas/typescript/v2/ConfigReadResponse'
+export type { LoginAccountResponse } from '../../documentation/app-server-schemas/typescript/v2/LoginAccountResponse'
 export type { ReasoningEffort } from '../../documentation/app-server-schemas/typescript/ReasoningEffort'

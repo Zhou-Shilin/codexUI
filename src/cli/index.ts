@@ -4,8 +4,10 @@ import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
+import { createInterface } from 'node:readline/promises'
 import { fileURLToPath } from 'node:url'
 import { dirname } from 'node:path'
+import { stdin as input, stdout as output } from 'node:process'
 import { Command } from 'commander'
 import qrcode from 'qrcode-terminal'
 import { createServer as createApp } from '../server/httpServer.js'
@@ -74,6 +76,64 @@ function resolveCodexCommand(): string | null {
 function hasCodexAuth(): boolean {
   const codexHome = process.env.CODEX_HOME?.trim() || join(homedir(), '.codex')
   return existsSync(join(codexHome, 'auth.json'))
+}
+
+async function promptForLoginMethod(): Promise<'oauth-local' | 'oauth-remote' | 'api-key'> {
+  const rl = createInterface({ input, output })
+  try {
+    console.log('Choose login method:')
+    console.log('  1) OAuth (local browser)')
+    console.log('  2) OAuth (remote/browser URL)')
+    console.log('  3) OpenAI-compatible API key')
+    console.log('')
+    while (true) {
+      const answer = (await rl.question('Select 1, 2, or 3: ')).trim()
+      if (answer === '1') return 'oauth-local'
+      if (answer === '2') return 'oauth-remote'
+      if (answer === '3') return 'api-key'
+      console.log('Please enter 1, 2, or 3.')
+    }
+  } finally {
+    rl.close()
+  }
+}
+
+async function promptForApiKeyConfig(): Promise<{ apiKey: string; baseUrl: string }> {
+  const rl = createInterface({ input, output })
+  try {
+    let apiKey = ''
+    while (!apiKey) {
+      apiKey = (await rl.question('API key: ')).trim()
+    }
+    const baseUrl = (await rl.question('Base URL (optional): ')).trim()
+    return { apiKey, baseUrl }
+  } finally {
+    rl.close()
+  }
+}
+
+async function runInteractiveLogin(codexCommand: string): Promise<void> {
+  const method = await promptForLoginMethod()
+  if (method === 'api-key') {
+    const { apiKey, baseUrl } = await promptForApiKeyConfig()
+    const args = ['login']
+    if (baseUrl) {
+      args.push('-c', `chatgpt_base_url="${baseUrl.replace(/"/g, '\\"')}"`)
+    }
+    args.push('--with-api-key')
+    const result = spawnSync(codexCommand, args, { stdio: ['pipe', 'inherit', 'inherit'], input: `${apiKey}\n` })
+    if (result.status !== 0) {
+      throw new Error(`Codex API key login failed with exit code ${String(result.status ?? -1)}`)
+    }
+    return
+  }
+
+  if (method === 'oauth-remote') {
+    runOrFail(codexCommand, ['login', '--device-auth'], 'Codex remote OAuth login')
+    return
+  }
+
+  runOrFail(codexCommand, ['login'], 'Codex local OAuth login')
 }
 
 function ensureCodexInstalled(): string | null {
@@ -237,8 +297,8 @@ async function startServer(options: { port: string; password: string | boolean; 
   const version = await readCliVersion()
   const codexCommand = ensureCodexInstalled() ?? resolveCodexCommand()
   if (!hasCodexAuth() && codexCommand) {
-    console.log('\nCodex is not logged in. Starting `codex login`...\n')
-    runOrFail(codexCommand, ['login'], 'Codex login')
+    console.log('\nCodex is not logged in. Starting interactive login...\n')
+    await runInteractiveLogin(codexCommand)
   }
   const requestedPort = parseInt(options.port, 10)
   const password = resolvePassword(options.password)
@@ -314,8 +374,8 @@ async function startServer(options: { port: string; password: string | boolean; 
 
 async function runLogin() {
   const codexCommand = ensureCodexInstalled() ?? 'codex'
-  console.log('\nStarting `codex login`...\n')
-  runOrFail(codexCommand, ['login'], 'Codex login')
+  console.log('\nStarting interactive login...\n')
+  await runInteractiveLogin(codexCommand)
 }
 
 program

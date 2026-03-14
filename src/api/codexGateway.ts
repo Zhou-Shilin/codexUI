@@ -9,6 +9,7 @@ import {
 } from './codexRpcClient'
 import type {
   ConfigReadResponse,
+  LoginAccountResponse,
   ModelListResponse,
   ReasoningEffort,
   ThreadListResponse,
@@ -276,6 +277,99 @@ export async function getCurrentModelConfig(): Promise<CurrentModelConfig> {
   const model = payload.config.model ?? ''
   const reasoningEffort = normalizeReasoningEffort(payload.config.model_reasoning_effort)
   return { model, reasoningEffort }
+}
+
+export type AuthLoginMethod = 'oauth-local' | 'oauth-remote' | 'api-key'
+
+export type AuthState = {
+  accountEmail: string
+  loginRequired: boolean
+  authMode: string
+  chatgptBaseUrl: string
+}
+
+function normalizeAccountState(payload: unknown): AuthState {
+  const record = payload && typeof payload === 'object' && !Array.isArray(payload)
+    ? (payload as Record<string, unknown>)
+    : {}
+  const config = record.config && typeof record.config === 'object' && !Array.isArray(record.config)
+    ? (record.config as Record<string, unknown>)
+    : {}
+  const account = record.account && typeof record.account === 'object' && !Array.isArray(record.account)
+    ? (record.account as Record<string, unknown>)
+    : {}
+
+  const email = typeof account.email === 'string' ? account.email : ''
+  const authMode = typeof account.authMethod === 'string'
+    ? account.authMethod
+    : typeof account.authMode === 'string'
+      ? account.authMode
+      : ''
+  const chatgptBaseUrl = typeof config.chatgpt_base_url === 'string' ? config.chatgpt_base_url : ''
+
+  return {
+    accountEmail: email,
+    loginRequired: !email && !authMode,
+    authMode,
+    chatgptBaseUrl,
+  }
+}
+
+export async function getAuthState(): Promise<AuthState> {
+  try {
+    const [accountPayload, configPayload] = await Promise.all([
+      callRpc<unknown>('account/read', { refreshToken: false }),
+      callRpc<ConfigReadResponse>('config/read', {}),
+    ])
+    const merged = {
+      account: accountPayload,
+      config: configPayload.config,
+    }
+    return normalizeAccountState(merged)
+  } catch {
+    return {
+      accountEmail: '',
+      loginRequired: true,
+      authMode: '',
+      chatgptBaseUrl: '',
+    }
+  }
+}
+
+export async function startAccountLogin(method: AuthLoginMethod, payload?: { apiKey?: string; baseUrl?: string }): Promise<LoginAccountResponse> {
+  if (method === 'api-key') {
+    const apiKey = payload?.apiKey?.trim() ?? ''
+    if (!apiKey) {
+      throw new Error('API key is required')
+    }
+
+    const updates: Array<{ key: string; value: unknown }> = []
+    const baseUrl = payload?.baseUrl?.trim() ?? ''
+    if (baseUrl) {
+      updates.push({ key: 'chatgpt_base_url', value: baseUrl })
+    }
+    if (updates.length > 0) {
+      await callRpc('config/batchWrite', { values: updates })
+    }
+
+    return await callRpc<LoginAccountResponse>('account/login/start', {
+      type: 'apiKey',
+      apiKey,
+    })
+  }
+
+  const forceRemote = method === 'oauth-remote'
+  await callRpc('config/batchWrite', {
+    values: [
+      { key: 'preferred_auth_method', value: 'chatgpt' },
+      { key: 'preferred_login_url_in_browser', value: forceRemote },
+    ],
+  })
+  return await callRpc<LoginAccountResponse>('account/login/start', { type: 'chatgpt' })
+}
+
+export async function cancelAccountLogin(loginId: string): Promise<void> {
+  await callRpc('account/login/cancel', { loginId })
 }
 
 function normalizeWorkspaceRootsState(payload: unknown): WorkspaceRootsState {
