@@ -1,31 +1,51 @@
 <template>
   <section v-if="authState.loginRequired" class="auth-screen">
     <div class="auth-card">
-      <h1 class="auth-title">Sign in to Codex</h1>
-      <p class="auth-subtitle">Choose the same login style as the official CLI.</p>
+      <template v-if="authView === 'methods'">
+        <h1 class="auth-title">Sign in to Codex</h1>
+        <p class="auth-subtitle">Choose how you want to connect.</p>
 
-      <div class="auth-methods">
-        <button class="auth-method-button" type="button" :disabled="isAuthBusy" @click="onStartOauthLogin('oauth-local')">
-          OAuth (local browser)
-        </button>
-        <button class="auth-method-button" type="button" :disabled="isAuthBusy" @click="onStartOauthLogin('oauth-remote')">
-          OAuth (remote/device code)
-        </button>
-      </div>
+        <div class="auth-methods auth-methods-stack">
+          <button class="auth-method-button" type="button" :disabled="isAuthBusy" @click="onStartOauthLogin('oauth-local')">
+            <span class="auth-method-title">OAuth</span>
+            <span class="auth-method-description">Use the local browser on this machine</span>
+          </button>
+          <button class="auth-method-button" type="button" :disabled="isAuthBusy" @click="onStartOauthLogin('oauth-remote')">
+            <span class="auth-method-title">OAuth (Remote)</span>
+            <span class="auth-method-description">Show a URL/device flow for another browser</span>
+          </button>
+          <button class="auth-method-button" type="button" :disabled="isAuthBusy" @click="authView = 'api-key'">
+            <span class="auth-method-title">API Key</span>
+            <span class="auth-method-description">Use an OpenAI-compatible API key and custom base URL</span>
+          </button>
+        </div>
+      </template>
 
-      <form class="auth-api-form" @submit.prevent="onStartApiKeyLogin">
-        <label class="auth-field">
-          <span>API key</span>
-          <input v-model="apiKeyInput" class="auth-input" type="password" placeholder="sk-..." :disabled="isAuthBusy" />
-        </label>
-        <label class="auth-field">
-          <span>Base URL</span>
-          <input v-model="baseUrlInput" class="auth-input" type="url" placeholder="https://api.example.com" :disabled="isAuthBusy" />
-        </label>
-        <button class="auth-method-button is-primary" type="submit" :disabled="isAuthBusy || !apiKeyInput.trim()">
-          API key login
-        </button>
-      </form>
+      <template v-else>
+        <div class="auth-header-row">
+          <button class="auth-back-button" type="button" :disabled="isAuthBusy" @click="onBackToAuthMethods">
+            ← Back
+          </button>
+          <div>
+            <h1 class="auth-title">API Key Login</h1>
+            <p class="auth-subtitle">Enter an API key and optional compatible base URL.</p>
+          </div>
+        </div>
+
+        <form class="auth-api-form" @submit.prevent="onStartApiKeyLogin">
+          <label class="auth-field">
+            <span>API key</span>
+            <input v-model="apiKeyInput" class="auth-input" type="password" placeholder="sk-..." :disabled="isAuthBusy" />
+          </label>
+          <label class="auth-field">
+            <span>Base URL</span>
+            <input v-model="baseUrlInput" class="auth-input" type="url" placeholder="https://api.example.com" :disabled="isAuthBusy" />
+          </label>
+          <button class="auth-method-button is-primary" type="submit" :disabled="isAuthBusy || !apiKeyInput.trim()">
+            Continue with API key
+          </button>
+        </form>
+      </template>
 
       <div v-if="pendingOauthUrl" class="auth-remote-box">
         <p class="auth-remote-label">Open this URL to continue:</p>
@@ -306,6 +326,7 @@ const sendWithEnter = ref(loadBoolPref(SEND_WITH_ENTER_KEY, true))
 const inProgressSendMode = ref<'steer' | 'queue'>(loadInProgressSendModePref())
 const darkMode = ref<'system' | 'light' | 'dark'>(loadDarkModePref())
 const authState = ref({ loginRequired: false, accountEmail: '', authMode: '', chatgptBaseUrl: '' })
+const authView = ref<'methods' | 'api-key'>('methods')
 const apiKeyInput = ref('')
 const baseUrlInput = ref('')
 const authError = ref('')
@@ -714,6 +735,14 @@ async function refreshAuthState(): Promise<void> {
   if (authState.value.chatgptBaseUrl) {
     baseUrlInput.value = authState.value.chatgptBaseUrl
   }
+  if (!authState.value.loginRequired) {
+    authView.value = 'methods'
+  }
+}
+
+function onBackToAuthMethods(): void {
+  authError.value = ''
+  authView.value = 'methods'
 }
 
 async function onStartOauthLogin(method: 'oauth-local' | 'oauth-remote'): Promise<void> {

@@ -442,12 +442,32 @@
   @apply grid gap-3 md:grid-cols-2;
 }
 
+.auth-methods-stack {
+  @apply grid-cols-1;
+}
+
 .auth-method-button {
-  @apply rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm font-medium text-left hover:bg-zinc-100 disabled:opacity-60 disabled:cursor-not-allowed;
+  @apply rounded-2xl border border-zinc-300 bg-zinc-50 px-5 py-4 text-left hover:bg-zinc-100 disabled:opacity-60 disabled:cursor-not-allowed flex flex-col gap-1;
+}
+
+.auth-method-title {
+  @apply text-base font-semibold;
+}
+
+.auth-method-description {
+  @apply text-sm text-zinc-500;
 }
 
 .auth-method-button.is-primary {
   @apply bg-zinc-900 text-white hover:bg-zinc-800;
+}
+
+.auth-header-row {
+  @apply flex flex-col gap-3;
+}
+
+.auth-back-button {
+  @apply self-start rounded-xl border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100 disabled:opacity-60;
 }
 
 .auth-api-form {
@@ -499,8 +519,16 @@
   @apply border-zinc-700 bg-zinc-800 text-zinc-100 hover:bg-zinc-700;
 }
 
+:root.dark .auth-method-description {
+  @apply text-zinc-400;
+}
+
 :root.dark .auth-method-button.is-primary {
   @apply bg-zinc-100 text-zinc-900 hover:bg-white;
+}
+
+:root.dark .auth-back-button {
+  @apply border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700;
 }
 
 :root.dark .auth-input {
